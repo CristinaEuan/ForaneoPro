@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1078674935400",
+    "project_id": "foraneoapp-80382",
+    "storage_bucket": "foraneoapp-80382.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1078674935400:android:754d431234d51a882475dd",
+        "android_client_info": {
+          "package_name": "com.example.foraneaoapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA65HRzzhIcuPJ4jfzUGC65RuPDDRF9zvw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
