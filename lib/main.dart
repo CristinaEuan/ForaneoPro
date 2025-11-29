@@ -17,7 +17,8 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: Colors.indigo,
       ),
-      home: const RegisterPage(),
+      debugShowCheckedModeBanner: false,
+        home: const RegisterPage(),
     );
   }
 }
@@ -73,6 +74,7 @@ class _RegisterPageState extends State<RegisterPage> {
     return null;
   }
 
+  // ⭐⭐⭐ SOLO ESTA PARTE FUE MODIFICADA ⭐⭐⭐
   Future _submit() async {
     final form = _formKey.currentState!;
     if (!form.validate()) return;
@@ -81,28 +83,13 @@ class _RegisterPageState extends State<RegisterPage> {
     await Future.delayed(const Duration(seconds: 1));
     setState(() => _isSubmitting = false);
 
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Registro recibido'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Correo: ${_emailController.text.trim()}'),
-            Text('Usuario: ${_usernameController.text.trim()}'),
-            Text('Contraseña: ${'*' * _passwordController.text.length}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
+    // 👉 Ir a principalpag
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const PrincipalPag()),
     );
   }
+  // ⭐⭐⭐ FIN DE LA UNICA MODIFICACION ⭐⭐⭐
 
   @override
   Widget build(BuildContext context) {
