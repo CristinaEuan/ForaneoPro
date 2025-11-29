@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'register_screen.dart'; //
+import 'principalpag.dart';
 
 void main() {
   runApp(const MyApp());
@@ -194,7 +195,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               )
                             : const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 14),
-                                child: Text('Enviar'),
+                                child: Text('iniciar sesión'),
                               ),
                       ),
                     ),
