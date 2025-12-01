@@ -56,6 +56,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:                 # <--- AÑADE ESTA LÍNEA (2 espacios de indentación)
+    - lib/imagen_2/         # <--- AÑADE ESTA LÍNEA (4 espacios de indentación)
+
 
   # To add assets to your application, add an assets section, like this:
   # assets:
