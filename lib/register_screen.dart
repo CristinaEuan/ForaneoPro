@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -20,7 +22,95 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirmPassword = true;
 
   @override
+  void dispose() {
+    _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _ageController.dispose();
+    super.dispose();
+  }
   
+  // ==========================================
+  //          FUNCIÓN DE GUARDAR EN FIRESTORE
+  // ==========================================
+  Future<void> _saveUserData(String uid) async {
+    final usersCollection = FirebaseFirestore.instance.collection('usuarios');
+
+    // Usamos el UID de Firebase Auth como ID del documento en Firestore
+    await usersCollection.doc(uid).set({
+      'username': _usernameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'age': int.tryParse(_ageController.text.trim()) ?? 0,
+      'registration_date': Timestamp.now(),
+    });
+  }
+
+  // ==========================================
+  //          FUNCIÓN DE REGISTRO COMPLETO
+  // ==========================================
+  Future<void> _registerUser() async {
+    // 1. Validar el formulario
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return; // Si la validación falla, detiene la función
+    }
+
+    // Mostrar un indicador de carga (opcional pero recomendado)
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Registrando usuario..."), duration: Duration(seconds: 1)),
+    );
+
+
+    try {
+      // 2. REGISTRAR USUARIO con Correo y Contraseña (Firebase Auth)
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // 3. GUARDAR DATOS ADICIONALES en Firestore
+      if (userCredential.user != null) {
+        await _saveUserData(userCredential.user!.uid);
+
+        // 4. Mostrar éxito y navegar
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text("¡Registro exitoso!"),
+              backgroundColor: Colors.green),
+        );
+        
+        // Esperar un momento y luego regresar a la pantalla anterior (Login)
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            Navigator.pop(context); 
+          }
+        });
+      }
+    } on FirebaseAuthException catch (e) {
+      // 5. MANEJO DE ERRORES específicos de Firebase Auth
+      String message;
+      if (e.code == 'weak-password') {
+        message = 'La contraseña es demasiado débil.';
+      } else if (e.code == 'email-already-in-use') {
+        message = 'Esta cuenta ya existe para ese correo.';
+      } else {
+        message = 'Error de registro: ${e.message}';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      // 6. Manejo de otros errores (ej. de red o Firestore)
+       ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Ocurrió un error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -30,7 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
 
       body: Container(
-        color: Colors.blue,   // MISMO COLOR QUE TU LOGIN
+        color: Colors.blue, 
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -150,30 +240,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     // BOTÓN REGISTRAR
                     SizedBox(
-  width: double.infinity,
-  child: FilledButton.tonal(
-    onPressed: () {
-      if (_formKey.currentState?.validate() ?? false) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registro enviado")),
-        );
-
-        Future.delayed(const Duration(milliseconds: 500), () {
-          Navigator.pop(context); // 🔥 regresa al login
-        });
-      }
-    },
-    child: const Padding(
-      padding: EdgeInsets.symmetric(vertical: 14),
-      child: Text("Registrarse"),
-    ),
-  ),
-),
-
-
-                    
-                    // Texto "¿Ya tienes cuenta?"
-                    
+                      width: double.infinity,
+                      child: FilledButton.tonal(
+                        onPressed: _registerUser, // <-- ¡Conectado a la función de Firebase!
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                          child: Text("Registrarse"),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
