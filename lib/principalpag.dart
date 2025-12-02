@@ -196,7 +196,6 @@ class _PrincipalPagState extends State<PrincipalPag> {
                 context,
                 text: "Control de gastos",
                 color: Colors.green.shade400,
-                imagePath: 'lib/imagen/imag_costo.jpg', 
                 onTap: () {
                   // Navegación a la nueva pantalla GastosPag
                   Navigator.push(
@@ -232,7 +231,6 @@ class _PrincipalPagState extends State<PrincipalPag> {
                 context,
                 text: "SOS",
                 color: Colors.red.shade400,
-                imagePath: 'lib/imagen_2/sos.jpg',
                 onTap: () {
                   Navigator.push(
                     context,
@@ -334,4 +332,4 @@ class _HexagonClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
-}
+} 
