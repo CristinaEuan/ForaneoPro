@@ -1,70 +1,88 @@
 import 'package:flutter/material.dart';
-import 'register_screen.dart'; //
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'register_screen.dart';
 import 'principalpag.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 
+// ======================= AuthWrapper =======================
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasData) {
+          // Usuario logueado -> ir a PrincipalPag
+          return const PrincipalPag();
+        }
+
+        // Usuario no logueado -> ir a login
+        return const LoginPage();
+      },
+    );
+  }
+}
+
+// ======================= MyApp =======================
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Registro demo',
+      title: 'Demo Firebase Auth',
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.indigo,
       ),
       debugShowCheckedModeBanner: false,
-        home: const RegisterPage(),
+      home: const AuthWrapper(),
     );
   }
 }
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+// ======================= LoginPage =======================
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
 
   @override
-  State createState() => _RegisterPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class _LoginPageState extends State<LoginPage> {
+  final _auth = FirebaseAuth.instance;
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  final FocusNode _emailFocus = FocusNode();
-  final FocusNode _usernameFocus = FocusNode();
-  final FocusNode _passwordFocus = FocusNode();
-
+  bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _isSubmitting = false;
 
   @override
   void dispose() {
     _emailController.dispose();
-    _usernameController.dispose();
     _passwordController.dispose();
-    _emailFocus.dispose();
-    _usernameFocus.dispose();
-    _passwordFocus.dispose();
     super.dispose();
   }
 
   String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Ingresa un correo';
-    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-    if (!emailRegex.hasMatch(value.trim())) return 'Correo inválido';
-    return null;
-  }
-
-  String? _validateUsername(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Ingresa un nombre de usuario';
-    if (value.trim().length < 3) return 'Mínimo 3 caracteres';
+    if (value == null || value.isEmpty) return 'Ingresa un correo';
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) return 'Correo inválido';
     return null;
   }
 
@@ -74,145 +92,121 @@ class _RegisterPageState extends State<RegisterPage> {
     return null;
   }
 
-  // ⭐⭐⭐ SOLO ESTA PARTE FUE MODIFICADA ⭐⭐⭐
-  Future _submit() async {
-    final form = _formKey.currentState!;
-    if (!form.validate()) return;
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSubmitting = true);
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isSubmitting = false);
+    setState(() => _isLoading = true);
 
-    // 👉 Ir a principalpag
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const PrincipalPag()),
-    );
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Inicio de sesión exitoso")),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String message;
+      if (e.code == 'user-not-found' || e.code == 'wrong-password') {
+        message = 'Usuario o contraseña incorrectos';
+      } else {
+        message = 'Error: ${e.message}';
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ $message"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
-  // ⭐⭐⭐ FIN DE LA UNICA MODIFICACION ⭐⭐⭐
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.indigo[600], // Fondo azul oscuro
       appBar: AppBar(
-        title: const Text('Formulario de registro'),
+        title: const Text("Iniciar sesión"),
         centerTitle: true,
+        backgroundColor: Colors.indigo,
       ),
-      body: Container(
-        color: Colors.blue,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    // Correo
-                    TextFormField(
-                      controller: _emailController,
-                      focusNode: _emailFocus,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Correo electrónico',
-                        hintText: 'ejemplo@dominio.com',
-                        prefixIcon: Icon(Icons.email),
-                      ),
-                      validator: _validateEmail,
-                      onFieldSubmitted: (_) {
-                        _usernameFocus.requestFocus();
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Nombre usuario
-                    TextFormField(
-                      controller: _usernameController,
-                      focusNode: _usernameFocus,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre de usuario',
-                        hintText: 'Tu nombre público',
-                        prefixIcon: Icon(Icons.person),
-                      ),
-                      validator: _validateUsername,
-                      onFieldSubmitted: (_) {
-                        _passwordFocus.requestFocus();
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Contraseña
-                    TextFormField(
-                      controller: _passwordController,
-                      focusNode: _passwordFocus,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Contraseña',
-                        hintText: 'Mínimo 6 caracteres',
-                        prefixIcon: const Icon(Icons.lock),
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility),
-                          onPressed: () {
-                            setState(() =>
-                                _obscurePassword = !_obscurePassword);
-                          },
-                        ),
-                      ),
-                      validator: _validatePassword,
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Botón
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.tonal(
-                        onPressed: _isSubmitting ? null : _submit,
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 14),
-                                child: Text('iniciar sesión'),
-                              ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // 🔥 Texto para registrar nueva cuenta
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => RegisterScreen(),
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "¿No tienes una cuenta? Regístrate",
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-                  ],
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                // EMAIL
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: "Correo electrónico",
+                    prefixIcon: Icon(Icons.email),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  validator: _validateEmail,
                 ),
-              ),
+                const SizedBox(height: 16),
+
+                // PASSWORD
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: "Contraseña",
+                    prefixIcon: const Icon(Icons.lock),
+                    filled: true,
+                    fillColor: Colors.white,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
+                  validator: _validatePassword,
+                ),
+                const SizedBox(height: 24),
+
+                // BOTÓN LOGIN
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonal(
+                    onPressed: _isLoading ? null : _login,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            child: Text("Iniciar sesión"),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // LINK A REGISTRO
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                    );
+                  },
+                  child: const Text(
+                    "¿No tienes cuenta? Regístrate",
+                    style: TextStyle(
+                      decoration: TextDecoration.underline,
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
