@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'detalles.dart'; // Asegúrate de que el nombre del archivo sea correcto
-// ...
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'detalles.dart';
 
-// Definimos la lista de motivos de gasto para el diálogo
+// Lista de motivos
 const List<String> motivosGasto = [
   'Comida',
   'Cosas personales',
@@ -18,24 +19,66 @@ class GastosPag extends StatefulWidget {
 }
 
 class _GastosPagState extends State<GastosPag> {
-  // === VARIABLES DE ESTADO ===
   bool _iniciado = false;
   double _dineroTotal = 0.0;
   double _dineroRestante = 0.0;
-  String _mensaje = "¡Hola! Presiona 'Comenzar' para iniciar tu control semanal.";
 
-  // Para almacenar gastos: Clave: Día de la semana (String), Valor: Lista de pares [Motivo, Cantidad]
+  String _mensaje =
+      "¡Hola! Presiona 'Comenzar' para iniciar tu control semanal.";
+
   Map<String, List<Map<String, dynamic>>> _gastosSemana = {};
 
   @override
   void initState() {
     super.initState();
-    _dineroRestante = _dineroTotal; // Inicialmente, te queda todo lo que tienes
+    _cargarDeMemoria(); // <--- CARGA AUTOMÁTICA
   }
 
-  // === FUNCIONALIDADES ===
+  // ===============================
+  //       SHARED PREFERENCES
+  // ===============================
 
-  // 1. Mostrar el día actual en tiempo real
+  Future<void> _guardarEnMemoria() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setBool("iniciado", _iniciado);
+    await prefs.setDouble("dineroTotal", _dineroTotal);
+    await prefs.setDouble("dineroRestante", _dineroRestante);
+
+    // Guardar gastos (en JSON)
+    final jsonGastos = jsonEncode(_gastosSemana);
+    await prefs.setString("gastosSemana", jsonGastos);
+  }
+
+  Future<void> _cargarDeMemoria() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (prefs.containsKey("iniciado")) {
+      setState(() {
+        _iniciado = prefs.getBool("iniciado") ?? false;
+        _dineroTotal = prefs.getDouble("dineroTotal") ?? 0.0;
+        _dineroRestante = prefs.getDouble("dineroRestante") ?? 0.0;
+
+        // Cargar gastos JSON
+        final jsonString = prefs.getString("gastosSemana");
+        if (jsonString != null) {
+          final mapa =
+              Map<String, dynamic>.from(jsonDecode(jsonString));
+
+          // Convertir los valores dinámicos a Map<String,dynamic>
+          _gastosSemana = mapa.map((key, value) {
+            final lista = List<Map<String, dynamic>>.from(value);
+            return MapEntry(key, lista);
+          });
+        }
+      });
+    }
+  }
+
+  // ===============================
+  //       DÍA ACTUAL
+  // ===============================
+
   String _getDiaActual() {
     final now = DateTime.now();
     final dias = [
@@ -47,25 +90,25 @@ class _GastosPagState extends State<GastosPag> {
       'Sábado',
       'Domingo'
     ];
-    // Obtiene el día de la semana (1=Lunes, 7=Domingo)
-    return dias[now.weekday - 1]; 
+    return dias[now.weekday - 1];
   }
 
-  // 2. Lógica del botón 'Comenzar'
+  // ===============================
+  //       INICIAR CONTROL
+  // ===============================
+
   void _iniciarControl() {
     setState(() {
       _iniciado = true;
       _mensaje = "Registra tu dinero";
     });
 
-    // Muestra el diálogo para ingresar el dinero
     _mostrarDialogoIngresarDinero();
   }
 
-  // 3. Diálogo para ingresar el dinero total
   Future<void> _mostrarDialogoIngresarDinero() async {
     final TextEditingController controller = TextEditingController();
-    
+
     await showDialog(
       context: context,
       builder: (context) {
@@ -78,12 +121,11 @@ class _GastosPagState extends State<GastosPag> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
               child: const Text("Cancelar"),
+              onPressed: () => Navigator.pop(context),
             ),
             TextButton(
+              child: const Text("Siguiente"),
               onPressed: () {
                 if (double.tryParse(controller.text) != null) {
                   setState(() {
@@ -91,10 +133,12 @@ class _GastosPagState extends State<GastosPag> {
                     _dineroRestante = _dineroTotal;
                     _mensaje = "¡Control iniciado! Tienes \$$_dineroTotal.";
                   });
+
+                  _guardarEnMemoria(); // <--- GUARDAR
+
                   Navigator.pop(context);
                 }
               },
-              child: const Text("Siguiente"),
             ),
           ],
         );
@@ -102,41 +146,42 @@ class _GastosPagState extends State<GastosPag> {
     );
   }
 
-  // 4. Diálogo y lógica para registrar un gasto
+  // ===============================
+  //       AGREGAR GASTO
+  // ===============================
+
   Future<void> _mostrarDialogoAgregarGasto() async {
     final TextEditingController controller = TextEditingController();
-    String? motivoSeleccionado = motivosGasto.first; // Motivo por defecto: Comida
+    String? motivoSeleccionado = motivosGasto.first;
 
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setStateSB) {
+          builder: (context, setSB) {
             return AlertDialog(
               title: const Text("💸 Registrar Gasto"),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Campo para la cantidad
                   TextField(
                     controller: controller,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: "Cuánto gastaste"),
+                    decoration:
+                        const InputDecoration(hintText: "Cuánto gastaste"),
                   ),
                   const SizedBox(height: 15),
-                  // Dropdown para los motivos
                   DropdownButtonFormField<String>(
                     value: motivoSeleccionado,
-                    decoration: const InputDecoration(labelText: "Motivo"),
-                    items: motivosGasto.map((String motivo) {
-                      return DropdownMenuItem<String>(
+                    items: motivosGasto.map((motivo) {
+                      return DropdownMenuItem(
                         value: motivo,
                         child: Text(motivo),
                       );
                     }).toList(),
-                    onChanged: (String? nuevoMotivo) {
-                      setStateSB(() { // Usa setStateSB para actualizar el diálogo
-                        motivoSeleccionado = nuevoMotivo;
+                    onChanged: (valor) {
+                      setSB(() {
+                        motivoSeleccionado = valor;
                       });
                     },
                   ),
@@ -144,18 +189,18 @@ class _GastosPagState extends State<GastosPag> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
                   child: const Text("Cancelar"),
+                  onPressed: () => Navigator.pop(context),
                 ),
                 TextButton(
+                  child: const Text("Registrar"),
                   onPressed: () {
                     final gasto = double.tryParse(controller.text);
-                    if (gasto != null && motivoSeleccionado != null && gasto > 0) {
+                    if (gasto != null && gasto > 0) {
                       _guardarGasto(gasto, motivoSeleccionado!);
                       Navigator.pop(context);
                     }
                   },
-                  child: const Text("Registrar"),
                 ),
               ],
             );
@@ -165,95 +210,88 @@ class _GastosPagState extends State<GastosPag> {
     );
   }
 
-  // 5. Función para guardar el gasto y actualizar el saldo
   void _guardarGasto(double cantidad, String motivo) {
     setState(() {
-      // 5.1. Actualizar el dinero restante
       _dineroRestante -= cantidad;
 
-      // 5.2. Registrar el gasto por día
-      final diaActual = _getDiaActual();
-      if (!_gastosSemana.containsKey(diaActual)) {
-        _gastosSemana[diaActual] = [];
+      final dia = _getDiaActual();
+      if (!_gastosSemana.containsKey(dia)) {
+        _gastosSemana[dia] = [];
       }
-      _gastosSemana[diaActual]!.add({
-        'motivo': motivo,
-        'cantidad': cantidad,
+
+      _gastosSemana[dia]!.add({
+        "motivo": motivo,
+        "cantidad": cantidad,
       });
     });
+
+    _guardarEnMemoria(); // <--- GUARDAR CADA VEZ
   }
 
-  // 6. Widget de gráfico de barras simplificado
+  // ===============================
+  //       BARRAS
+  // ===============================
+
   Widget _graficoDeBarras() {
     if (!_iniciado || _gastosSemana.isEmpty) {
       return const Center(child: Text("No hay gastos registrados esta semana."));
     }
 
-    // Calcula el total gastado por motivo para el gráfico
     Map<String, double> gastosPorMotivo = {};
-    _gastosSemana.forEach((dia, listaGastos) {
-      for (var gasto in listaGastos) {
-        final motivo = gasto['motivo'] as String;
-        final cantidad = gasto['cantidad'] as double;
-        gastosPorMotivo[motivo] = (gastosPorMotivo[motivo] ?? 0.0) + cantidad;
+
+    _gastosSemana.forEach((dia, lista) {
+      for (var gasto in lista) {
+        final motivo = gasto['motivo'];
+        final cantidad = gasto['cantidad'];
+        gastosPorMotivo[motivo] =
+            (gastosPorMotivo[motivo] ?? 0) + cantidad;
       }
     });
 
-    final totalSemanal = gastosPorMotivo.values.fold(0.0, (sum, item) => sum + item);
-    
-    // Muestra las barras
+    final total = gastosPorMotivo.values.fold(0.0, (a, b) => a + b);
+
     return ListView(
-      children: gastosPorMotivo.entries.map((entry) {
-        final porcentaje = entry.value / totalSemanal;
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${entry.key}: \$${entry.value.toStringAsFixed(2)}'),
-              LinearProgressIndicator(
-                value: porcentaje,
-                backgroundColor: Colors.grey[300],
-                color: entry.key == 'Comida' ? Colors.orange : Colors.blue, // Ejemplo de color
-                minHeight: 10,
-              ),
-            ],
-          ),
+      children: gastosPorMotivo.entries.map((e) {
+        final porcentaje = e.value / total;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("${e.key}: \$${e.value.toStringAsFixed(2)}"),
+            LinearProgressIndicator(
+              value: porcentaje,
+              backgroundColor: Colors.grey[300],
+              color: Colors.blue,
+              minHeight: 10,
+            ),
+            const SizedBox(height: 6),
+          ],
         );
       }).toList(),
     );
   }
 
-
-  // === ESTRUCTURA VISUAL (BUILD) ===
+  // ===============================
+  //       INTERFAZ EXACTA
+  // ===============================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // -----------------------
-              //     FLECHA DE ANTERIOR (FUNCIONALIDAD 1)
-              // -----------------------
               Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      // Vuelve a la vista PrincipalPag
-                      Navigator.pop(context); 
-                    },
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
 
-              // -----------------------
-              //     DÍA DE LA SEMANA (FUNCIONALIDAD 2)
-              // -----------------------
               Container(
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(8),
@@ -262,15 +300,13 @@ class _GastosPagState extends State<GastosPag> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  "Día de la semana: ${_getDiaActual()}", // Muestra el día actual
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  "Día de la semana: ${_getDiaActual()}",
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(height: 20),
 
-              // -----------------------
-              //     INICIO DEL CONTROL (FUNCIONALIDAD 3)
-              // -----------------------
               if (!_iniciado)
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -280,27 +316,21 @@ class _GastosPagState extends State<GastosPag> {
                   ),
                   child: Column(
                     children: [
-                      Text(
-                        _mensaje, // Mensaje "Registra tu dinero"
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 18),
-                      ),
+                      Text(_mensaje,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 18)),
                       const SizedBox(height: 10),
                       ElevatedButton(
-                        onPressed: _iniciarControl, // Ejecuta la lógica de inicio
                         child: const Text("Comenzar"),
+                        onPressed: _iniciarControl,
                       ),
                     ],
                   ),
                 ),
 
-              // -----------------------
-              //     DINERO TENÍAS / TE QUEDA (FUNCIONALIDAD 4)
-              // -----------------------
               if (_iniciado)
                 Row(
                   children: [
-                    // TENÍAS
                     Expanded(
                       child: _infoBox(
                         title: "TENÍAS",
@@ -309,40 +339,34 @@ class _GastosPagState extends State<GastosPag> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    // TE QUEDA (ACTUALIZACIÓN AUTOMÁTICA)
                     Expanded(
                       child: _infoBox(
                         title: "TE QUEDA",
                         value: "\$${_dineroRestante.toStringAsFixed(2)}",
-                        color: _dineroRestante < 0 ? Colors.red.shade100 : Colors.blue.shade100, // Alerta si es negativo
+                        color: Colors.blue.shade100,
                       ),
                     ),
                   ],
                 ),
+
               const SizedBox(height: 20),
 
-              // -----------------------
-              //     BOTÓN AGREGAR GASTOS (FUNCIONALIDAD 5)
-              // -----------------------
               if (_iniciado)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _mostrarDialogoAgregarGasto,
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
+                        backgroundColor: Colors.indigo),
+                    child: const Text(
+                      "AGREGAR GASTOS",
+                      style: TextStyle(fontSize: 16, color: Colors.white),
                     ),
-                    child: const Text("AGREGAR GASTOS", style: TextStyle(fontSize: 16)),
                   ),
                 ),
-              
+
               const SizedBox(height: 20),
 
-              // -----------------------
-              //     GRÁFICO DE BARRAS (FUNCIONALIDAD 6)
-              // -----------------------
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(16),
@@ -351,33 +375,28 @@ class _GastosPagState extends State<GastosPag> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Gráfico de Gastos Semanales", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text("Gráfico de Gastos Semanales",
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                       const Divider(),
-                      Expanded(
-                        child: _graficoDeBarras(),
-                      ),
+                      Expanded(child: _graficoDeBarras()),
                     ],
                   ),
                 ),
               ),
 
-              const SizedBox(height: 10),
-              // Botón "Ver detalles" (Placeholder)
               ElevatedButton(
+                child: const Text("Ver detalles"),
                 onPressed: () {
-                  // Lógica para ver detalles
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => DetallesPag(
-                        gastosSemana: _gastosSemana, // <--- Pasamos el mapa de gastos
-                      ),
+                      builder: (_) =>
+                          DetallesPag(gastosSemana: _gastosSemana),
                     ),
                   );
                 },
-                child: const Text("Ver detalles"),
               ),
             ],
           ),
@@ -386,8 +405,10 @@ class _GastosPagState extends State<GastosPag> {
     );
   }
 
-  // Widget auxiliar para las cajas de información (TENÍAS/TE QUEDA)
-  Widget _infoBox({required String title, required String value, required Color color}) {
+  Widget _infoBox(
+      {required String title,
+      required String value,
+      required Color color}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -397,9 +418,13 @@ class _GastosPagState extends State<GastosPag> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          Text(title,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+          Text(value,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 20)),
         ],
       ),
     );
